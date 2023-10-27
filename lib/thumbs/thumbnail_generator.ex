@@ -15,7 +15,7 @@ defmodule Thumbs.ThumbnailGenerator do
     parent_ref = make_ref()
     parent = self()
 
-    Task.start_link(fn ->
+    Task.Supervisor.start_child(Thumbs.TaskSup, fn ->
       case exec("ffmpeg -i pipe:0 -vf \"fps=1/#{count}\" -f image2pipe -c:v png -") do
         {:ok, pid, ref} ->
           gen = %ThumbnailGenerator{ref: ref, exec_pid: pid, pid: self(), caller: caller}
@@ -34,13 +34,12 @@ defmodule Thumbs.ThumbnailGenerator do
     end
   end
 
-  def send_chunk(%ThumbnailGenerator{ref: ref}, chunk) do
-    :exec.send(ref, chunk)
+  def send_chunk(%ThumbnailGenerator{exec_pid: pid}, chunk) do
+    :exec.send(pid, chunk)
   end
 
-  def close(%ThumbnailGenerator{ref: ref, pid: pid}) do
-    Process.unlink(pid)
-    :exec.send(ref, :eof)
+  def close(%ThumbnailGenerator{exec_pid: pid}) do
+    :exec.send(pid, :eof)
   end
 
   defp receive_images(%ThumbnailGenerator{ref: ref, caller: caller} = gen, state) do
@@ -64,7 +63,6 @@ defmodule Thumbs.ThumbnailGenerator do
         end
 
       {:DOWN, ^ref, :process, _pid, reason} ->
-        # need to send the current unsent one
         if state.count == 0 do
           Logger.debug("Finished without generating any thumbnails: #{inspect(reason)}")
           send(caller, {ref, :exit, reason})

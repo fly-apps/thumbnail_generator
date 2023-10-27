@@ -17,6 +17,7 @@ defmodule Thumbs.Application do
       # Start a worker by calling: Thumbs.Worker.start_link(arg)
       # {Thumbs.Worker, arg},
       # Start to serve requests, typically the last entry
+      {Task.Supervisor, name: Thumbs.TaskSup},
       ThumbsWeb.Endpoint
     ]
 

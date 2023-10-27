@@ -1,36 +1,10 @@
-defmodule ThumbsWeb.VideoUploadWriter do
-  @behaviour Phoenix.LiveView.UploadWriter
-
-  alias Thumbs.ThumbnailGenerator
-
-  @impl true
-  def init(opts) do
-    {:ok, %{gen: ThumbnailGenerator.open(opts)}}
-  end
-
-  @impl true
-  def meta(state), do: %{gen: state.gen}
-
-  @impl true
-  def write_chunk(data, state) do
-    ThumbnailGenerator.send_chunk(state.gen, data)
-    {:ok, state}
-  end
-
-  @impl true
-  def close(state, _reason) do
-    ThumbnailGenerator.close(state.gen)
-    {:ok, state}
-  end
-end
-
 defmodule ThumbsWeb.HomeLive do
   use ThumbsWeb, :live_view
 
   def render(assigns) do
     ~H"""
     <.form for={%{}} phx-change="validate" phx-submit="save">
-      <div class="space-y-4">
+      <div class="space-y-4 relative">
         <h1 class="text-xl"><%= @message %></h1>
         <.live_file_input upload={@uploads.video} />
         <div :for={entry <- @uploads.video.entries}>
@@ -39,11 +13,12 @@ defmodule ThumbsWeb.HomeLive do
           </div>
         </div>
 
-        <div id="thumbs" phx-update="stream">
+        <div id="thumbs" phx-update="stream" class="grid grid-cols-3 gap-2">
           <img
             :for={{id, %{encoded: encoded}} <- @streams.thumbs}
             id={id}
             src={"data:image/png;base64," <> encoded}
+            class="rounded-md"
           />
         </div>
       </div>
@@ -60,17 +35,12 @@ defmodule ThumbsWeb.HomeLive do
        accept: ~w(.mp4 .mpeg .mov),
        max_file_size: 524_288_000,
        max_entries: 1,
-       progress: &handle_progress/3,
        writer: fn _, entry, _socket ->
-         fps = if entry.client_size < 10_485_760, do: 10, else: 60
-         {ThumbsWeb.VideoUploadWriter, caller: self(), fps: fps}
+         fps = if entry.client_size < 20_971_520, do: 10, else: 60
+         {ThumbsWeb.ThumbnailUploadWriter, caller: self(), fps: fps}
        end,
        auto_upload: true
      )}
-  end
-
-  defp handle_progress(:video, _entry, socket) do
-    {:noreply, socket}
   end
 
   def handle_info({_ref, :image, _count, encoded}, socket) do
@@ -83,10 +53,14 @@ defmodule ThumbsWeb.HomeLive do
   end
 
   def handle_info({_ref, :ok, total_count}, socket) do
+    consume_uploaded_entries(socket, :video, fn meta, _entry -> {:ok, meta} end)
     {:noreply, assign(socket, message: "#{total_count} thumbnails generated!")}
   end
 
   def handle_event("validate", _params, socket) do
-    {:noreply, assign(socket, message: "Generating thumbnails...")}
+    {:noreply,
+     socket
+     |> stream(:thumbs, [], reset: true)
+     |> assign(count: 0, message: "Generating thumbnails...")}
   end
 end
