@@ -19,7 +19,7 @@ defmodule Thumbs.MixProject do
   def application do
     [
       mod: {Thumbs.Application, []},
-      extra_applications: [:logger, :runtime_tools]
+      extra_applications: [:logger, :runtime_tools, :erlexec]
     ]
   end
 

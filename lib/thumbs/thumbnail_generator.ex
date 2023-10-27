@@ -7,33 +7,28 @@ defmodule Thumbs.ThumbnailGenerator do
 
   defstruct ref: nil, exec_pid: nil, caller: nil, pid: nil
 
-  def open(count, timeout \\ 5000) when is_integer(count) do
-    caller_ref = make_ref()
-    caller = self()
+  def open(opts \\ []) do
+    Keyword.validate!(opts, [:timeout, :caller, :fps])
+    count = Keyword.get(opts, :fps, 60)
+    timeout = Keyword.get(opts, :timeout, 5_000)
+    caller = Keyword.get(opts, :caller, self())
+    parent_ref = make_ref()
+    parent = self()
 
-    {:ok, _pid} =
-      Task.start_link(fn ->
-        result =
-          :exec.run("ffmpeg -i pipe:0 -vf \"fps=1/#{count}\" -f image2pipe -c:v png -", [
-            :stdin,
-            :stdout,
-            :stderr,
-            :monitor
-          ])
+    Task.start_link(fn ->
+      case exec("ffmpeg -i pipe:0 -vf \"fps=1/#{count}\" -f image2pipe -c:v png -") do
+        {:ok, pid, ref} ->
+          gen = %ThumbnailGenerator{ref: ref, exec_pid: pid, pid: self(), caller: caller}
+          send(parent, {parent_ref, gen})
+          receive_images(gen, %{count: 0, current: nil})
 
-        case result do
-          {:ok, pid, ref} ->
-            gen = %ThumbnailGenerator{ref: ref, exec_pid: pid, pid: self(), caller: caller}
-            send(caller, {caller_ref, gen})
-            receive_images(gen, %{count: 0, current: nil})
-
-          other ->
-            exit(other)
-        end
-      end)
+        other ->
+          exit(other)
+      end
+    end)
 
     receive do
-      {^caller_ref, %ThumbnailGenerator{} = gen} -> gen
+      {^parent_ref, %ThumbnailGenerator{} = gen} -> gen
     after
       timeout -> exit(:timeout)
     end
@@ -43,7 +38,8 @@ defmodule Thumbs.ThumbnailGenerator do
     :exec.send(ref, chunk)
   end
 
-  def close(%ThumbnailGenerator{ref: ref}) do
+  def close(%ThumbnailGenerator{ref: ref, pid: pid}) do
+    Process.unlink(pid)
     :exec.send(ref, :eof)
   end
 
@@ -58,10 +54,7 @@ defmodule Thumbs.ThumbnailGenerator do
             Logger.debug("image #{state.count + 1} received")
 
             if state.current do
-              encoded =
-                state.current |> Enum.reverse() |> IO.iodata_to_binary() |> Base.encode64()
-
-              send(caller, {ref, :image, state.count, encoded})
+              send(caller, {ref, :image, state.count, encode_current(state)})
             end
 
             receive_images(gen, %{state | count: state.count + 1, current: [bin]})
@@ -70,14 +63,24 @@ defmodule Thumbs.ThumbnailGenerator do
             receive_images(gen, %{state | current: [bin | state.current]})
         end
 
-      {:DOWN, ^ref, :process, _, reason} ->
+      {:DOWN, ^ref, :process, _pid, reason} ->
+        # need to send the current unsent one
         if state.count == 0 do
           Logger.debug("Finished without generating any thumbnails: #{inspect(reason)}")
           send(caller, {ref, :exit, reason})
         else
-          Logger.debug("Finished generated #{state.count - 1} thumbnail(s)")
-          send(caller, {ref, :ok, state.count - 1})
+          Logger.debug("Finished generating #{state.count} thumbnail(s)")
+          send(caller, {ref, :image, state.count, encode_current(state)})
+          send(caller, {ref, :ok, state.count})
         end
     end
+  end
+
+  defp encode_current(state) do
+    state.current |> Enum.reverse() |> IO.iodata_to_binary() |> Base.encode64()
+  end
+
+  defp exec(cmd) do
+    :exec.run(cmd, [:stdin, :stdout, :stderr, :monitor])
   end
 end
