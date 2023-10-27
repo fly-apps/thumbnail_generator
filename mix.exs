@@ -52,6 +52,7 @@ defmodule Thumbs.MixProject do
       {:dns_cluster, "~> 0.1.1"},
       {:plug_cowboy, "~> 2.5"},
       {:erlexec, "~> 2.0"},
+      {:req, ">= 0.0.0"}
     ]
   end
 

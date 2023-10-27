@@ -20,6 +20,7 @@ defmodule Thumbs.ThumbnailGenerator do
         {:ok, pid, ref} ->
           gen = %ThumbnailGenerator{ref: ref, exec_pid: pid, pid: self(), caller: caller}
           send(parent, {parent_ref, gen})
+          Process.monitor(caller)
           receive_images(gen, %{count: 0, current: nil})
 
         other ->
@@ -35,7 +36,21 @@ defmodule Thumbs.ThumbnailGenerator do
   end
 
   def send_chunk(%ThumbnailGenerator{exec_pid: pid}, chunk) do
-    :exec.send(pid, chunk)
+    each_part(chunk, 60_000, fn part -> :exec.send(pid, part) end)
+  end
+
+  defp each_part(binary, max_size, func) when is_binary(binary) and is_integer(max_size) do
+    case binary do
+      <<>> ->
+        :ok
+
+      part when byte_size(part) <= max_size ->
+        func.(part)
+
+      <<part::binary-size(max_size), rest::binary>> ->
+        func.(part)
+        each_part(rest, max_size, func)
+    end
   end
 
   def close(%ThumbnailGenerator{exec_pid: pid}) do
@@ -50,7 +65,7 @@ defmodule Thumbs.ThumbnailGenerator do
       {:stdout, ^ref, bin} ->
         case bin do
           <<@png_begin, _rest::binary>> ->
-            Logger.debug("image #{state.count + 1} received")
+            Logger.info("image #{state.count + 1} received")
 
             if state.current do
               send(caller, {ref, :image, state.count, encode_current(state)})
@@ -62,12 +77,15 @@ defmodule Thumbs.ThumbnailGenerator do
             receive_images(gen, %{state | current: [bin | state.current]})
         end
 
+      {:DOWN, _ref, :process, ^caller, reason} ->
+        exit(reason)
+
       {:DOWN, ^ref, :process, _pid, reason} ->
         if state.count == 0 do
-          Logger.debug("Finished without generating any thumbnails: #{inspect(reason)}")
+          Logger.info("Finished without generating any thumbnails: #{inspect(reason)}")
           send(caller, {ref, :exit, reason})
         else
-          Logger.debug("Finished generating #{state.count} thumbnail(s)")
+          Logger.info("Finished generating #{state.count} thumbnail(s)")
           send(caller, {ref, :image, state.count, encode_current(state)})
           send(caller, {ref, :ok, state.count})
         end
