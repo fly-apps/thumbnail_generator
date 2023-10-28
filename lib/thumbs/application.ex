@@ -7,7 +7,7 @@ defmodule Thumbs.Application do
 
   @impl true
   def start(_type, _args) do
-    dragonfly_parent = Dragonfly.Backend.ParentMonitor.remote_parent_pid()
+    dragonfly_parent = Dragonfly.Backend.ParentMonitor.remote_parent()
 
     children = [
       ThumbsWeb.Telemetry,

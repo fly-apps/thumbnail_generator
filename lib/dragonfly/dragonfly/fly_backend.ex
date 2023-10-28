@@ -36,6 +36,7 @@ defmodule Dragonfly.FlyBackend do
             connect_timeout: nil,
             runner_id: nil,
             machine_pid: nil,
+            parent_ref: nil,
             runner_node_basename: nil,
             runner_instance_id: nil,
             runner_private_ip: nil,
@@ -54,7 +55,7 @@ defmodule Dragonfly.FlyBackend do
       host: "https://api.machines.dev",
       size: "performance-2x",
       connect_timeout: 30_000,
-      runner_node_basename: node_base,
+      runner_node_basename: node_base
     }
 
     state =
@@ -68,46 +69,30 @@ defmodule Dragonfly.FlyBackend do
       end
     end
 
-    parent = encode_pid(self())
+    parent_ref = make_ref()
+    encoded_parent = encode_term({parent_ref, self()})
 
     new_env =
       Map.merge(
-        %{PHX_SERVER: "false", DRAGONFLY_PARENT: parent},
+        %{PHX_SERVER: "false", DRAGONFLY_PARENT: encoded_parent},
         state.env
       )
 
     new_state =
-      %FlyBackend{state | env: new_env}
+      %FlyBackend{state | env: new_env, parent_ref: parent_ref}
 
     {:ok, new_state}
-  end
-
-  def __rpc_spawn_link__(func) when is_function(func, 0) do
-    func.()
-    # Task.Supervisor.async(Dragonfly.FlyBackend.TaskSup, func)
-  end
-
-  def __rpc_spawn_link__({mod, func, args}) do
-    apply(mod, func, args)
-    # Task.Supervisor.async(Dragonfly.FlyBackend.TaskSup, mod, func, args)
   end
 
   @impl true
   def remote_spawn_link(%FlyBackend{} = state, term) do
     case term do
       func when is_function(func, 0) ->
-        pid = Node.spawn_link(state.runner_node_name, __MODULE__, :__rpc_spawn_link__, [func])
+        pid = Node.spawn_link(state.runner_node_name, func)
         {:ok, pid, state}
 
       {mod, fun, args} when is_atom(mod) and is_atom(fun) and is_list(args) ->
-        pid =
-          Node.spawn_link(
-            state.runner_node_name,
-            __MODULE__,
-            :__rpc_spawn_link__,
-            [{mod, fun, args}]
-          )
-
+        pid = Node.spawn_link(state.runner_node_name, mod, fun, args)
         {:ok, pid, state}
 
       other ->
@@ -122,7 +107,7 @@ defmodule Dragonfly.FlyBackend do
   end
 
   @impl true
-  def remote_boot(%FlyBackend{} = state) do
+  def remote_boot(%FlyBackend{parent_ref: parent_ref} = state) do
     req =
       Req.post!("#{state.host}/v1/apps/#{state.app}/machines",
         auth: {:bearer, state.token},
@@ -151,8 +136,7 @@ defmodule Dragonfly.FlyBackend do
 
         machine_pid =
           receive do
-            {:up, machine_pid} ->
-              IO.inspect(Node.list())
+            {^parent_ref, :up, machine_pid} ->
               machine_pid
           after
             state.connect_timeout ->
@@ -168,7 +152,8 @@ defmodule Dragonfly.FlyBackend do
   end
 
   @impl true
-  def handle_info({:up, _}, state) do
+  # TODO maybe remove this
+  def handle_info({_parent_ref, :up, _}, state) do
     {:noreply, state}
   end
 
@@ -191,7 +176,7 @@ defmodule Dragonfly.FlyBackend do
     len |> :crypto.strong_rand_bytes() |> Base.encode64(padding: false) |> binary_part(0, len)
   end
 
-  defp encode_pid(pid) when is_pid(pid) do
-    pid |> :erlang.term_to_binary() |> Base.encode64()
+  defp encode_term(term) do
+    term |> :erlang.term_to_binary() |> Base.encode64()
   end
 end

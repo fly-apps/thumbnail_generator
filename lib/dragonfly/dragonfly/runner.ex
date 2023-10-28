@@ -239,7 +239,6 @@ defmodule Dragonfly.Runner do
           case runner.backend.remote_boot(backend_state) do
             {:ok, new_backend_state} ->
               new_runner = %Runner{runner | status: :booted}
-              IO.inspect(new_backend_state)
               {:reply, :ok, %{state | runner: new_runner, backend_state: new_backend_state}}
 
             {:error, reason} ->
@@ -279,13 +278,7 @@ defmodule Dragonfly.Runner do
     result =
       runner.backend.remote_spawn_link(state.backend_state, fn ->
         try do
-          # Process.flag(:trap_exit, true)
-          # ensure app is fully started if parent connects before up
-          if otp_app = System.get_env("RELEASE_NAME") do
-            Application.ensure_all_started(:"#{otp_app}")
-          end
-
-          task = Task.async(func)
+          task = Task.Supervisor.async_nolink(runner.task_sup, func)
 
           case Task.yield(task, timeout) || Task.shutdown(task) do
             {:ok, result} ->
@@ -294,13 +287,12 @@ defmodule Dragonfly.Runner do
               if caller_parent, do: send(caller_parent, {ref, :ok, result})
               send(parent, {:remote_ok, ref})
 
+            {:exit, reason} ->
+              send(parent, {:remote_fail, ref, {:exit, reason}})
+
             nil ->
               send(parent, {:remote_fail, ref, {:exit, :timeout}})
           end
-        catch
-          :throw, reason -> send(parent, {:remote_fail, ref, {:throw, reason}})
-          :exit, reason -> send(parent, {:remote_fail, ref, {:exit, reason}})
-          :error, reason -> send(parent, {:remote_fail, ref, {:error, {reason, __STACKTRACE__}}})
         after
           if runner.single_use, do: runner.backend.system_shutdown()
         end

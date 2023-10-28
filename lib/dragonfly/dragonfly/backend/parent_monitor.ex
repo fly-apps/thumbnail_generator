@@ -15,8 +15,9 @@ defmodule Dragonfly.Backend.ParentMonitor do
 
   @doc """
   TODO
+  {ref, pid}
   """
-  def remote_parent_pid do
+  def remote_parent do
     case System.fetch_env("DRAGONFLY_PARENT") do
       {:ok, encoded} -> encoded |> Base.decode64!() |> :erlang.binary_to_term()
       :error -> nil
@@ -26,14 +27,15 @@ defmodule Dragonfly.Backend.ParentMonitor do
   @impl true
   def init(opts) do
     :global_group.monitor_nodes(true)
-    parent_pid = Keyword.fetch!(opts, :parent_pid)
+    {parent_ref, parent_pid} = Keyword.fetch!(opts, :parent)
     failsafe_timeout = Keyword.get(opts, :failsafe_timeout, @failsafe_timeout)
     failsafe_timer = Process.send_after(self(), :failsafe_stop, failsafe_timeout)
 
     {:ok,
      connect(%{
        parent_pid: parent_pid,
-       parent_ref: nil,
+       parent_ref: parent_ref,
+       parent_monitor_ref: nil,
        connect_timer: nil,
        connect_attempts: 0,
        failsafe_timer: failsafe_timer
@@ -52,11 +54,11 @@ defmodule Dragonfly.Backend.ParentMonitor do
     if connected? do
       state.failsafe_timer && Process.cancel_timer(state.failsafe_timer)
       ref = Process.monitor(state.parent_pid)
-      send(state.parent_pid, {:up, self()})
+      send(state.parent_pid, {state.parent_ref, :up, self()})
 
       %{
         state
-        | parent_ref: ref,
+        | parent_monitor_ref: ref,
           failsafe_timer: nil,
           connect_timer: nil,
           connect_attempts: new_attempts
@@ -72,7 +74,7 @@ defmodule Dragonfly.Backend.ParentMonitor do
 
   @impl true
   def handle_info(:connect, state) do
-    if state.parent_ref do
+    if state.parent_monitor_ref do
       {:noreply, state}
     else
       {:noreply, connect(state)}
