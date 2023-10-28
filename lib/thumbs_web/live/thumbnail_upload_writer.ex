@@ -5,15 +5,14 @@ defmodule ThumbsWeb.ThumbnailUploadWriter do
 
   @impl true
   def init(opts) do
+    # generator = ThumbnailGenerator.open(opts)
     generator = Dragonfly.call(fn -> ThumbnailGenerator.open(opts) end, log: :debug)
     {:ok, %{gen: generator}}
   end
 
   @impl true
   def write_chunk(data, state) do
-    Node.spawn(node(state.gen.pid), fn ->
-      ThumbnailGenerator.send_chunk(state.gen, data)
-    end)
+    ThumbnailGenerator.stream_chunk!(state.gen, data)
     {:ok, state}
   end
 
@@ -22,10 +21,7 @@ defmodule ThumbsWeb.ThumbnailUploadWriter do
 
   @impl true
   def close(state, _reason) do
-    Process.unlink(state.gen.pid)
-    Node.spawn(node(state.gen.pid), fn ->
-      ThumbnailGenerator.close(state.gen)
-    end)
+    ThumbnailGenerator.close(state.gen)
     {:ok, state}
   end
 end

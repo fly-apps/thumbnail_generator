@@ -36,9 +36,9 @@ defmodule ThumbsWeb.HomeLive do
        max_file_size: 524_288_000,
        max_entries: 1,
        chunk_size: 1_048_576, # 1mb
-       writer: fn _, entry, _socket ->
-         fps = if entry.client_size < 20_971_520, do: 10, else: 60
-         {ThumbsWeb.ThumbnailUploadWriter, caller: self(), fps: fps}
+       writer: fn _, _entry, _socket ->
+        #  fps = if entry.client_size < 20_971_520, do: 10, else: 60
+         {ThumbsWeb.ThumbnailUploadWriter, caller: self(), fps: 10}
        end,
        auto_upload: true
      )}

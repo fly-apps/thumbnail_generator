@@ -20,6 +20,7 @@ defmodule Thumbs.Application do
       # {Thumbs.Worker, arg},
       # Start to serve requests, typically the last entry
       {Task.Supervisor, name: Thumbs.TaskSup},
+      {DynamicSupervisor, name: Thumbs.DynamicSup},
       {Task.Supervisor, name: Dragonfly.TaskSupervisor},
       Dragonfly.FlyBackend,
       !dragonfly_parent && ThumbsWeb.Endpoint
