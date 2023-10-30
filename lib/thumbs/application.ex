@@ -8,6 +8,8 @@ defmodule Thumbs.Application do
   @impl true
   def start(_type, _args) do
     dragonfly_parent = Dragonfly.Backend.ParentMonitor.remote_parent()
+    terminator_timeout = Application.get_env(:dragonfly, :terminator_timeout) || 20_000
+
 
     children = [
       ThumbsWeb.Telemetry,
@@ -22,6 +24,7 @@ defmodule Thumbs.Application do
       {Task.Supervisor, name: Thumbs.TaskSup},
       {DynamicSupervisor, name: Thumbs.DynamicSup},
       {Task.Supervisor, name: Dragonfly.TaskSupervisor},
+      {Dragonfly.TaskTerminator, timeout: terminator_timeout},
       Dragonfly.FlyBackend,
       !dragonfly_parent && ThumbsWeb.Endpoint
     ] |> Enum.filter(&(&1))

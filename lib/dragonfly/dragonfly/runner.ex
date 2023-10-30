@@ -1,7 +1,5 @@
 defmodule Dragonfly.Runner do
-  @moduledoc """
-  TODO
-  """
+  @moduledoc false
   use GenServer
   require Logger
 
@@ -275,6 +273,9 @@ defmodule Dragonfly.Runner do
 
     result =
       runner.backend.remote_spawn_link(state.backend_state, fn ->
+        # This runs on the remote node. Supervise the task so we can monitor it,
+        # deadline it, and handle graceful shutdowns when the whole system goes
+        # down
         try do
           task = Task.Supervisor.async_nolink(runner.task_sup, func)
 
@@ -361,14 +362,11 @@ defmodule Dragonfly.Runner do
     result
   end
 
-  defp time(%Runner{log: _} = _runner, _label, func) do
+  defp time(%Runner{log: false} = _runner, _label, func) do
     func.()
   end
 
-  defp debug(%{runner: %Runner{log: log}}, msg) do
-    case log do
-      :debug -> Logger.info(msg)
-      _ -> :noop
-    end
+  defp debug(%{runner: %Runner{log: level}}, msg) do
+    Logger.log(level, msg)
   end
 end
