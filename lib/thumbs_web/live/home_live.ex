@@ -35,7 +35,7 @@ defmodule ThumbsWeb.HomeLive do
        accept: ~w(.mp4 .mpeg .mov),
        max_file_size: 524_288_000,
        max_entries: 1,
-       chunk_size: 1_048_576, # 1mb
+       chunk_size: 262_144, # 256kb
        writer: fn _, _entry, _socket ->
         #  fps = if entry.client_size < 20_971_520, do: 10, else: 60
          {ThumbsWeb.ThumbnailUploadWriter, caller: self(), fps: 10}

@@ -84,7 +84,6 @@ defmodule Dragonfly.Runner do
         end
 
       {^ref, :fail, {kind, reason}} ->
-        IO.inspect({ref, :fail, {kind, reason}})
         case {kind, reason} do
           {:throw, reason} -> throw(reason)
           {:error, {reason, stack}} -> reraise(reason, stack)
@@ -121,7 +120,7 @@ defmodule Dragonfly.Runner do
   end
 
   def handle_info({:remote_fail, ref, reason}, state) do
-    IO.inspect({:remote_fail, ref, reason})
+    debug(state, "remote_fail: #{inspect(reason)}")
     %{^ref => from} = state.waiting
     GenServer.reply(from, {ref, :fail, reason})
     {:noreply, drop_waiting(state, ref)}
@@ -137,7 +136,6 @@ defmodule Dragonfly.Runner do
           %{^ref => _} -> maybe_reply_waiting(state, ref, {ref, :fail, {:exit, reason}})
           %{} -> :noop
         end
-        IO.inspect({:drop_waiting, ref, {:exit, reason}})
 
         new_state =
           state
@@ -363,7 +361,14 @@ defmodule Dragonfly.Runner do
     result
   end
 
-  defp time(%Runner{log: _} = _Runner, _label, func) do
+  defp time(%Runner{log: _} = _runner, _label, func) do
     func.()
+  end
+
+  defp debug(%{runner: %Runner{log: log}}, msg) do
+    case log do
+      :debug -> Logger.info(msg)
+      _ -> :noop
+    end
   end
 end
