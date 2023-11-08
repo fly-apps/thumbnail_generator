@@ -17,7 +17,12 @@ defmodule Thumbs.ThumbnailGenerator do
   end
 
   def close(%ThumbnailGenerator{} = gen) do
-    GenServer.call(gen.pid, :close)
+    ref = Process.monitor(gen.pid)
+    receive do
+      {:DOWN, ^ref, :process, _pid, _reason} -> :ok
+    after
+      0 -> GenServer.call(gen.pid, :close)
+    end
   end
 
   def open(opts \\ []) do

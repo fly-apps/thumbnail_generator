@@ -35,13 +35,25 @@ defmodule ThumbsWeb.HomeLive do
        accept: ~w(.mp4 .mpeg .mov),
        max_file_size: 524_288_000,
        max_entries: 1,
-       chunk_size: 262_144, # 256kb
+       # 256kb
+       chunk_size: 262_144,
+       progress: &handle_progress/3,
        writer: fn _, _entry, _socket ->
-        #  fps = if entry.client_size < 20_971_520, do: 10, else: 60
+         #  fps = if entry.client_size < 20_971_520, do: 10, else: 60
          {ThumbsWeb.ThumbnailUploadWriter, caller: self(), fps: 10}
        end,
        auto_upload: true
      )}
+  end
+
+  def handle_progress(:video, entry, socket) do
+    if entry.done? do
+      consume_uploaded_entry(socket, entry, fn _meta ->
+        {:ok, :noop}
+      end)
+    end
+
+    {:noreply, socket}
   end
 
   def handle_info({_ref, :image, _count, encoded}, socket) do
@@ -54,7 +66,6 @@ defmodule ThumbsWeb.HomeLive do
   end
 
   def handle_info({_ref, :ok, total_count}, socket) do
-    consume_uploaded_entries(socket, :video, fn meta, _entry -> {:ok, meta} end)
     {:noreply, assign(socket, message: "#{total_count} thumbnails generated!")}
   end
 

@@ -22,6 +22,8 @@ end
 
 if config_env() == :prod do
   config :dragonfly, :backend, Dragonfly.FlyBackend
+  config :dragonfly, Dragonfly.FlyBackend, token: System.fetch_env!("FLY_API_TOKEN")
+  config :dragonfly, :terminator, log: :info
 
   database_url =
     System.get_env("DATABASE_URL") ||

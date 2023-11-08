@@ -38,7 +38,7 @@ defmodule Thumbs.MixProject do
       {:postgrex, ">= 0.0.0"},
       {:phoenix_html, "~> 3.3"},
       {:phoenix_live_reload, "~> 1.2", only: :dev},
-      {:phoenix_live_view, "~> 0.20.1"},
+      {:phoenix_live_view, github: "phoenixframework/phoenix_live_view", override: true},
       {:floki, ">= 0.30.0", only: :test},
       {:phoenix_live_dashboard, "~> 0.8.2"},
       {:esbuild, "~> 0.7", runtime: Mix.env() == :dev},
@@ -52,7 +52,8 @@ defmodule Thumbs.MixProject do
       {:dns_cluster, "~> 0.1.1"},
       {:plug_cowboy, "~> 2.5"},
       {:erlexec, "~> 2.0"},
-      {:req, ">= 0.0.0"}
+      {:req, ">= 0.0.0"},
+      {:dragonfly, "~> 0.1.3"}
     ]
   end
 
