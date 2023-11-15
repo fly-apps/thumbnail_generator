@@ -7,29 +7,29 @@ defmodule Thumbs.Application do
 
   @impl true
   def start(_type, _args) do
-    dragonfly_parent = Dragonfly.Parent.get()
+    flame_parent = FLAME.Parent.get()
 
     children =
       [
         ThumbsWeb.Telemetry,
         Thumbs.Repo,
-        !dragonfly_parent &&
+        !flame_parent &&
           {DNSCluster, query: Application.get_env(:thumbs, :dns_cluster_query) || :ignore},
         {Phoenix.PubSub, name: Thumbs.PubSub},
         # Start the Finch HTTP client for sending emails
-        !dragonfly_parent && {Finch, name: Thumbs.Finch},
+        !flame_parent && {Finch, name: Thumbs.Finch},
         # Start a worker by calling: Thumbs.Worker.start_link(arg)
         # {Thumbs.Worker, arg},
         # Start to serve requests, typically the last entry
         {Task.Supervisor, name: Thumbs.TaskSup},
         {DynamicSupervisor, name: Thumbs.DynamicSup},
-        {Dragonfly.Pool,
+        {FLAME.Pool,
          name: Thumbs.FFMpegRunner,
          min: 0,
          max: 10,
          max_concurrency: 5,
-         idle_shutdown_after: {20_000, &idle?/0}},
-        !dragonfly_parent && ThumbsWeb.Endpoint
+         idle_shutdown_after: 10_000},
+        !flame_parent && ThumbsWeb.Endpoint
       ]
       |> Enum.filter(& &1)
 

@@ -16,13 +16,8 @@ defmodule Thumbs.ThumbnailGenerator do
     each_part(chunk, 60_000, fn part -> :ok = exec_send(gen, part) end)
   end
 
-  def close(%ThumbnailGenerator{} = gen) do
-    ref = Process.monitor(gen.pid)
-    receive do
-      {:DOWN, ^ref, :process, _pid, _reason} -> :ok
-    after
-      0 -> GenServer.call(gen.pid, :close)
-    end
+  def close(%ThumbnailGenerator{} = gen, timeout \\ :infinity) do
+    GenServer.call(gen.pid, {:close, timeout}, timeout)
   end
 
   def open(opts \\ []) do
@@ -38,7 +33,7 @@ defmodule Thumbs.ThumbnailGenerator do
       restart: :temporary
     }
 
-    {:ok, pid} = DynamicSupervisor.start_child(Thumbs.DynamicSup, spec)
+    {:ok, pid} = FLAME.place_child(Thumbs.FFMpegRunner, spec)
 
     receive do
       {^parent_ref, %ThumbnailGenerator{} = gen} ->
@@ -65,10 +60,11 @@ defmodule Thumbs.ThumbnailGenerator do
   end
 
   @impl true
-  def handle_call(:close, _from, state) do
+  def handle_call({:close, timeout}, _from, state) do
     %ThumbnailGenerator{ref: ref} = state.gen
+    if timeout != :infinity, do: Process.send_after(self(), :timeout, timeout)
     :exec.send(ref, :eof)
-    {:reply, :ok, state}
+    {:stop, :normal, :ok, await_stdout_eof(state)}
   end
 
   def handle_call({:exec_send, data}, _from, state) do
@@ -83,21 +79,7 @@ defmodule Thumbs.ThumbnailGenerator do
   end
 
   def handle_info({:stdout, ref, bin}, state) do
-    %ThumbnailGenerator{ref: ^ref, caller: caller} = state.gen
-
-    case bin do
-      <<@png_begin, _rest::binary>> ->
-        Logger.info("image #{state.count + 1} received")
-
-        if state.current do
-          send(caller, {ref, :image, state.count, encode_current(state)})
-        end
-
-        {:noreply, %{state | count: state.count + 1, current: [bin]}}
-
-      _ ->
-        {:noreply, %{state | current: [bin | state.current]}}
-    end
+    {:noreply, handle_stdout(state, ref, bin)}
   end
 
   def handle_info({:DOWN, ref, :process, pid, reason}, state) do
@@ -149,6 +131,44 @@ defmodule Thumbs.ThumbnailGenerator do
       :exec.send(ref, data)
     else
       GenServer.call(pid, {:exec_send, data})
+    end
+  end
+
+  defp await_stdout_eof(state) do
+    %ThumbnailGenerator{ref: gen_ref, caller: caller} = state.gen
+
+    receive do
+      :timeout ->
+        send(caller, {gen_ref, :ok, state.count})
+        state
+
+      {:DOWN, ^gen_ref, :process, _pid, _} ->
+        send(caller, {gen_ref, :image, state.count, encode_current(state)})
+        send(caller, {gen_ref, :ok, state.count})
+        state
+
+      {:stdout, ref, bin} ->
+        state
+        |> handle_stdout(ref, bin)
+        |> await_stdout_eof()
+    end
+  end
+
+  defp handle_stdout(state, ref, bin) do
+    %ThumbnailGenerator{ref: ^ref, caller: caller} = state.gen
+
+    case bin do
+      <<@png_begin, _rest::binary>> ->
+        Logger.info("image #{state.count + 1} received")
+
+        if state.current do
+          send(caller, {ref, :image, state.count, encode_current(state)})
+        end
+
+        %{state | count: state.count + 1, current: [bin]}
+
+      _ ->
+        %{state | current: [bin | state.current]}
     end
   end
 end

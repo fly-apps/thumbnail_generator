@@ -5,7 +5,7 @@ defmodule ThumbsWeb.ThumbnailUploadWriter do
 
   @impl true
   def init(opts) do
-    generator = Dragonfly.call(Thumbs.FFMpegRunner, fn -> ThumbnailGenerator.open(opts) end)
+    generator = IO.inspect ThumbnailGenerator.open(opts)
     {:ok, %{gen: generator}}
   end
 
