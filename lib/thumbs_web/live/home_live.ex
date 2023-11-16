@@ -29,10 +29,10 @@ defmodule ThumbsWeb.HomeLive do
   def mount(_params, _session, socket) do
     {:ok,
      socket
-     |> assign(message: "Select a file to generate thumbnails", count: 0)
+     |> assign(message: "Select an .mp4 file to generate thumbnails", count: 0)
      |> stream(:thumbs, [])
      |> allow_upload(:video,
-       accept: ~w(.mp4 .mpeg .mov),
+       accept: ~w(.mp4),
        max_file_size: 524_288_000,
        max_entries: 1,
        # 256kb

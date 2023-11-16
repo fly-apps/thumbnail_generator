@@ -5,7 +5,7 @@ defmodule ThumbsWeb.ThumbnailUploadWriter do
 
   @impl true
   def init(opts) do
-    generator = IO.inspect ThumbnailGenerator.open(opts)
+    generator = ThumbnailGenerator.open(opts)
     {:ok, %{gen: generator}}
   end
 
