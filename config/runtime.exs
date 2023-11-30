@@ -22,7 +22,7 @@ end
 
 if config_env() == :prod do
   config :flame, :backend, FLAME.FlyBackend
-  config :flame, FLAME.FlyBackend, token: System.fetch_env!("FLY_API_TOKEN")
+  config :flame, FLAME.FlyBackend, token: System.fetch_env!("FLY_API_TOKEN"), boot_timeout: 60_000
   config :flame, :terminator, log: :info
 
   database_url =

@@ -28,7 +28,8 @@ defmodule Thumbs.Application do
          min: 0,
          max: 10,
          max_concurrency: 5,
-         idle_shutdown_after: 10_000},
+         idle_shutdown_after: 10_000,
+         log: :debug},
         !flame_parent && ThumbsWeb.Endpoint
       ]
       |> Enum.filter(& &1)
@@ -40,10 +41,6 @@ defmodule Thumbs.Application do
   end
 
   require Logger
-
-  defp idle? do
-    Supervisor.which_children(Thumbs.DynamicSup) == []
-  end
 
   # Tell Phoenix to update the endpoint configuration
   # whenever the application is updated.

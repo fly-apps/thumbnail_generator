@@ -18,6 +18,8 @@ defmodule Thumbs.ThumbnailGenerator do
 
   def close(%ThumbnailGenerator{} = gen, timeout \\ :infinity) do
     GenServer.call(gen.pid, {:close, timeout}, timeout)
+  catch
+    :exit, _reason -> :ok
   end
 
   def open(opts \\ []) do
@@ -27,12 +29,7 @@ defmodule Thumbs.ThumbnailGenerator do
     parent_ref = make_ref()
     parent = self()
 
-    spec = %{
-      id: parent_ref,
-      start: {__MODULE__, :start_link, [{caller, parent_ref, parent, opts}]},
-      restart: :temporary
-    }
-
+    spec = {__MODULE__, {caller, parent_ref, parent, opts}}
     {:ok, pid} = FLAME.place_child(Thumbs.FFMpegRunner, spec)
 
     receive do
@@ -132,6 +129,8 @@ defmodule Thumbs.ThumbnailGenerator do
     else
       GenServer.call(pid, {:exec_send, data})
     end
+  catch
+    :exit, reason -> {:exit, reason}
   end
 
   defp await_stdout_eof(state) do
@@ -143,7 +142,9 @@ defmodule Thumbs.ThumbnailGenerator do
         state
 
       {:DOWN, ^gen_ref, :process, _pid, _} ->
-        send(caller, {gen_ref, :image, state.count, encode_current(state)})
+        if state.current do
+          send(caller, {gen_ref, :image, state.count, encode_current(state)})
+        end
         send(caller, {gen_ref, :ok, state.count})
         state
 

@@ -53,7 +53,7 @@ defmodule Thumbs.MixProject do
       {:plug_cowboy, "~> 2.5"},
       {:erlexec, "~> 2.0"},
       {:req, ">= 0.0.0"},
-      {:flame, "~> 0.1.1"}
+      {:flame, "~> 0.1.3"}
     ]
   end
 
